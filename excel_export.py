@@ -39,6 +39,19 @@ ALIGN_RIGHT = Alignment(horizontal="right", vertical="center")
 ALIGN_WRAP_LEFT = Alignment(horizontal="left", vertical="center", wrap_text=True)
 
 
+def _sanitize_excel_text(value: str | None) -> str:
+    """Cegah Excel formula injection pada teks input pengguna."""
+    if value is None:
+        return ""
+    text = str(value)
+    if not text or text == "-":
+        return text
+    stripped = text.lstrip()
+    if (stripped and stripped[0] in ("=", "+", "-", "@")) or text[0] in ("\t", "\r", "\n"):
+        return f"'{text}"
+    return text
+
+
 def _format_jam_wib(iso_str: str) -> str:
     """Ambil jam HH:MM:SS dari string waktu ISO lokal."""
     if not iso_str:
@@ -335,7 +348,7 @@ def _build_ringkasan_sheet(ws, data: dict) -> None:
         for idx, item in enumerate(items, start=1):
             ws.row_dimensions[item_row].height = 20
             porsi = (item["total"] / total_omzet) if total_omzet > 0 else 0.0
-            vals = [idx, item["nama_item"], item["qty"], item["total"], porsi]
+            vals = [idx, _sanitize_excel_text(item["nama_item"]), item["qty"], item["total"], porsi]
             fmts = [INT_FORMAT, None, INT_FORMAT, CURRENCY_FORMAT, PERCENT_FORMAT]
             aligns = [ALIGN_CENTER, ALIGN_LEFT, ALIGN_RIGHT, ALIGN_RIGHT, ALIGN_RIGHT]
 
@@ -433,11 +446,11 @@ def _build_transactions_sheet(ws, data: dict) -> None:
                 trx["jam_wib"],
                 trx["status"],
                 metode,
-                trx["ringkasan"],
+                _sanitize_excel_text(trx["ringkasan"]),
                 trx["total_harga"],
                 uang_val,
                 kembali_val,
-                trx["catatan_bayar"],
+                _sanitize_excel_text(trx["catatan_bayar"]),
             ]
             row_aligns = [
                 ALIGN_CENTER,
@@ -537,7 +550,7 @@ def _build_details_sheet(ws, data: dict) -> None:
                 line["jam_wib"],
                 line["status"],
                 line["metode_bayar"],
-                line["nama_item"],
+                _sanitize_excel_text(line["nama_item"]),
                 line["harga_satuan"],
                 line["qty"],
                 line["subtotal"],

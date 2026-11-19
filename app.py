@@ -1,6 +1,7 @@
 import io
 import os
 import re
+from datetime import datetime
 from flask import Flask, jsonify, redirect, render_template, request, send_file
 from werkzeug.exceptions import HTTPException
 
@@ -9,33 +10,57 @@ from excel_export import build_daily_report_excel
 
 app = Flask(__name__)
 
+MAX_NAME_LEN = 120
+MAX_NOTE_LEN = 250
+MAX_ITEMS_PER_ORDER = 200
+MAX_MONEY_VALUE = 1_000_000_000
 
-def parse_positive_int(val) -> int | None:
-    """Validasi bahwa nilai adalah integer bulat > 0."""
+
+def _parse_bounded_int(val, min_value: int) -> int | None:
+    """Validasi bahwa nilai adalah integer bulat >= min_value dan <= MAX_MONEY_VALUE."""
     if isinstance(val, bool) or val is None:
         return None
+    n: int | None = None
     if isinstance(val, int):
-        return val if val > 0 else None
-    if isinstance(val, str):
+        n = val
+    elif isinstance(val, str):
         s = val.strip()
         if s.isdigit():
             n = int(s)
-            return n if n > 0 else None
-    return None
+    if n is None or n < min_value or n > MAX_MONEY_VALUE:
+        return None
+    return n
+
+
+def parse_positive_int(val) -> int | None:
+    """Validasi bahwa nilai adalah integer bulat > 0 dan <= MAX_MONEY_VALUE."""
+    return _parse_bounded_int(val, 1)
 
 
 def parse_non_negative_int(val) -> int | None:
-    """Validasi bahwa nilai adalah integer bulat >= 0."""
-    if isinstance(val, bool) or val is None:
-        return None
-    if isinstance(val, int):
-        return val if val >= 0 else None
-    if isinstance(val, str):
-        s = val.strip()
-        if s.isdigit():
-            n = int(s)
-            return n if n >= 0 else None
-    return None
+    """Validasi bahwa nilai adalah integer bulat >= 0 dan <= MAX_MONEY_VALUE."""
+    return _parse_bounded_int(val, 0)
+
+
+def _validate_iso_date(raw_val) -> tuple[str | None, tuple | None]:
+    """Validasi string tanggal kalender YYYY-MM-DD (default hari ini WIB)."""
+    tanggal = (str(raw_val) if raw_val is not None else "").strip()
+    if not tanggal or tanggal in ("undefined", "null"):
+        return today_wib_str(), None
+
+    if not re.match(r"^\d{4}-\d{2}-\d{2}$", tanggal):
+        return None, (
+            jsonify({"ok": False, "error": "Format tanggal harus YYYY-MM-DD."}),
+            400,
+        )
+    try:
+        datetime.strptime(tanggal, "%Y-%m-%d")
+    except ValueError:
+        return None, (
+            jsonify({"ok": False, "error": "Tanggal kalender tidak valid."}),
+            400,
+        )
+    return tanggal, None
 
 
 # Inisialisasi database otomatis saat aplikasi jalan
@@ -47,6 +72,9 @@ def disable_cache(response):
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "SAMEORIGIN"
+    response.headers["Referrer-Policy"] = "same-origin"
     return response
 
 
@@ -107,24 +135,53 @@ def api_get_menus():
         conn.close()
 
 
-@app.route("/api/menus", methods=["POST"])
-def api_create_menu():
-    data = request.get_json(silent=True)
+def _validate_menu_payload(data) -> tuple[tuple[str, int] | None, tuple | None]:
+    """Validasi payload JSON untuk pembuatan atau pembaruan menu."""
     if not isinstance(data, dict):
-        return jsonify({"ok": False, "error": "Format data harus berupa JSON."}), 400
+        return None, (
+            jsonify({"ok": False, "error": "Format data harus berupa JSON."}),
+            400,
+        )
 
     nama_menu = str(data.get("nama_menu") or "").strip()
-    harga = parse_positive_int(data.get("harga"))
-
     if not nama_menu:
-        return jsonify({"ok": False, "error": "Isi nama menu terlebih dahulu."}), 400
-    if harga is None:
-        return (
+        return None, (
+            jsonify({"ok": False, "error": "Isi nama menu terlebih dahulu."}),
+            400,
+        )
+    if len(nama_menu) > MAX_NAME_LEN:
+        return None, (
             jsonify(
-                {"ok": False, "error": "Harga harus berupa angka bulat lebih dari 0."}
+                {
+                    "ok": False,
+                    "error": f"Nama menu maksimal {MAX_NAME_LEN} karakter.",
+                }
             ),
             400,
         )
+
+    harga = parse_positive_int(data.get("harga"))
+    if harga is None:
+        return None, (
+            jsonify(
+                {
+                    "ok": False,
+                    "error": f"Harga harus berupa angka bulat antara 1 dan {MAX_MONEY_VALUE:,}.".replace(
+                        ",", "."
+                    ),
+                }
+            ),
+            400,
+        )
+    return (nama_menu, harga), None
+
+
+@app.route("/api/menus", methods=["POST"])
+def api_create_menu():
+    parsed, err_resp = _validate_menu_payload(request.get_json(silent=True))
+    if err_resp is not None:
+        return err_resp
+    nama_menu, harga = parsed
 
     conn = get_connection()
     try:
@@ -155,22 +212,10 @@ def api_create_menu():
 
 @app.route("/api/menus/<int:id_menu>", methods=["PUT"])
 def api_update_menu(id_menu: int):
-    data = request.get_json(silent=True)
-    if not isinstance(data, dict):
-        return jsonify({"ok": False, "error": "Format data harus berupa JSON."}), 400
-
-    nama_menu = str(data.get("nama_menu") or "").strip()
-    harga = parse_positive_int(data.get("harga"))
-
-    if not nama_menu:
-        return jsonify({"ok": False, "error": "Isi nama menu terlebih dahulu."}), 400
-    if harga is None:
-        return (
-            jsonify(
-                {"ok": False, "error": "Harga harus berupa angka bulat lebih dari 0."}
-            ),
-            400,
-        )
+    parsed, err_resp = _validate_menu_payload(request.get_json(silent=True))
+    if err_resp is not None:
+        return err_resp
+    nama_menu, harga = parsed
 
     conn = get_connection()
     try:
@@ -244,6 +289,16 @@ def api_checkout():
             jsonify({"ok": False, "error": "Pesanan masih kosong."}),
             400,
         )
+    if len(raw_items) > MAX_ITEMS_PER_ORDER:
+        return (
+            jsonify(
+                {
+                    "ok": False,
+                    "error": f"Maksimal {MAX_ITEMS_PER_ORDER} item dalam satu transaksi.",
+                }
+            ),
+            400,
+        )
 
     validated_items = []
     total_harga = 0
@@ -261,6 +316,16 @@ def api_checkout():
         if not nama_item:
             return (
                 jsonify({"ok": False, "error": f"Nama item ke-{idx} kosong."}),
+                400,
+            )
+        if len(nama_item) > MAX_NAME_LEN:
+            return (
+                jsonify(
+                    {
+                        "ok": False,
+                        "error": f"Nama item ke-{idx} maksimal {MAX_NAME_LEN} karakter.",
+                    }
+                ),
                 400,
             )
         if harga_satuan is None:
@@ -299,6 +364,16 @@ def api_checkout():
         if catatan_raw is not None and str(catatan_raw).strip() != ""
         else None
     )
+    if catatan_bayar is not None and len(catatan_bayar) > MAX_NOTE_LEN:
+        return (
+            jsonify(
+                {
+                    "ok": False,
+                    "error": f"Catatan pembayaran maksimal {MAX_NOTE_LEN} karakter.",
+                }
+            ),
+            400,
+        )
 
     uang_diterima = None
     kembalian = None
@@ -389,11 +464,13 @@ def api_checkout():
 # ---------------------------------------------------------------------------
 @app.route("/api/capital", methods=["PUT", "POST"])
 def api_set_capital():
-    data = request.get_json(silent=True) or {}
-    raw_tgl = str(data.get("tanggal") or "").strip()
-    tanggal = today_wib_str() if (not raw_tgl or raw_tgl in ("undefined", "null")) else raw_tgl
-    if not re.match(r"^\d{4}-\d{2}-\d{2}$", tanggal):
-        return jsonify({"ok": False, "error": "Format tanggal harus YYYY-MM-DD."}), 400
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"ok": False, "error": "Format data harus berupa JSON."}), 400
+
+    tanggal, err_resp = _validate_iso_date(data.get("tanggal"))
+    if err_resp is not None:
+        return err_resp
 
     modal = parse_non_negative_int(data.get("modal"))
     if modal is None:
@@ -422,18 +499,7 @@ def api_set_capital():
 
 def _resolve_report_date() -> tuple[str | None, tuple | None]:
     """Ambil dan validasi parameter tanggal (YYYY-MM-DD) dari query string."""
-    tanggal = (request.args.get("date") or "").strip()
-    if not tanggal or tanggal in ("undefined", "null"):
-        tanggal = today_wib_str()
-
-    if not re.match(r"^\d{4}-\d{2}-\d{2}$", tanggal):
-        return None, (
-            jsonify(
-                {"ok": False, "error": "Format tanggal harus YYYY-MM-DD."}
-            ),
-            400,
-        )
-    return tanggal, None
+    return _validate_iso_date(request.args.get("date"))
 
 
 # ---------------------------------------------------------------------------

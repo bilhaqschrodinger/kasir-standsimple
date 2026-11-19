@@ -5,8 +5,9 @@ standpos.db-wal
 standpos.db-shm
 *.db
 
-# Hasil export
+# Hasil export & laporan verifikasi
 *.xlsx
+verification.json
 
 # Python & virtual environment
 __pycache__/

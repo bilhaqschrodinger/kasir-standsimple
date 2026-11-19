@@ -19,11 +19,13 @@ def today_wib_str() -> str:
 
 
 def get_connection(db_path: str | None = None) -> sqlite3.Connection:
-    """Membuka koneksi SQLite (`standpos.db`)."""
+    """Membuka koneksi SQLite (`standpos.db`) dengan WAL, busy timeout, dan foreign keys aktif."""
     target_path = db_path or DB_PATH
-    conn = sqlite3.connect(target_path)
+    conn = sqlite3.connect(target_path, timeout=10.0)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON;")
+    conn.execute("PRAGMA busy_timeout = 5000;")
+    conn.execute("PRAGMA journal_mode = WAL;")
     return conn
 
 
@@ -61,6 +63,7 @@ CREATE TABLE IF NOT EXISTS daily_capital (
 );
 
 CREATE INDEX IF NOT EXISTS idx_trx_waktu ON transactions(waktu);
+CREATE INDEX IF NOT EXISTS idx_detail_trx ON transaction_details(id_transaction);
 """
 
 

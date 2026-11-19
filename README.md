@@ -76,11 +76,24 @@ standpos/
 ├── run.bat              # Launcher otomatis untuk Windows
 ├── run.sh               # Launcher otomatis untuk macOS/Linux
 ├── share.bat            # Launcher + tunnel publik sementara (Windows)
+├── scripts/
+│   └── verify.py        # Pengujian otomatis & audit QA (threshold 0.95)
 ├── templates/
 │   └── pos.html         # Antarmuka kasir & laporan terpadu
 └── static/
     └── js/
         └── pos.js       # Logika keranjang, checkout, polling & export
+```
+
+---
+
+## Verifikasi & Kualitas Kode
+
+Jalankan suite verifikasi otomatis (mencakup uji fungsi API/SQLite/Excel, keamanan input & header HTTP, performa WAL + indeks, praktik terbaik kode, dan kelengkapan dokumentasi):
+
+```bash
+python scripts/verify.py
+python scripts/verify.py --json --threshold 0.95
 ```
 
 ---
