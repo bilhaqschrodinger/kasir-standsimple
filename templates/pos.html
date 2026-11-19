@@ -36,7 +36,7 @@
     }
   </style>
 </head>
-<body class="min-h-screen flex flex-col selection:bg-zinc-900 selection:text-white">
+<body class="min-h-screen flex flex-col selection:bg-zinc-900 selection:text-white" data-today="{{ today }}">
 
   <!-- Notifikasi Singkat -->
   <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none px-4 sm:px-0"></div>
@@ -475,9 +475,6 @@
     </div>
   </div>
 
-  <script>
-    window.TODAY_WIB = "{{ today }}";
-  </script>
-  <script src="/static/js/pos.js?v=5"></script>
+  <script src="/static/js/pos.js?v=6"></script>
 </body>
 </html>

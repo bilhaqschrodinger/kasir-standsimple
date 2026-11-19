@@ -4,11 +4,25 @@ import re
 from datetime import datetime
 from flask import Flask, jsonify, redirect, render_template, request, send_file
 from werkzeug.exceptions import HTTPException
+from werkzeug.serving import WSGIRequestHandler
 
 from db import get_connection, init_db, now_wib_iso, today_wib_str
 from excel_export import build_daily_report_excel
 
 app = Flask(__name__)
+
+CSP_POLICY = (
+    "default-src 'self'; "
+    "script-src 'self' https://cdn.tailwindcss.com; "
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+    "font-src 'self' https://fonts.gstatic.com; "
+    "img-src 'self' data:; "
+    "connect-src 'self'; "
+    "object-src 'none'; "
+    "base-uri 'self'; "
+    "frame-ancestors 'self'; "
+    "form-action 'self'"
+)
 
 MAX_NAME_LEN = 120
 MAX_NOTE_LEN = 250
@@ -72,6 +86,10 @@ def disable_cache(response):
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"
+    response.headers["Content-Security-Policy"] = CSP_POLICY
+    response.headers["Strict-Transport-Security"] = "max-age=31536000"
+    response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=(), payment=(), usb=()"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "SAMEORIGIN"
     response.headers["Referrer-Policy"] = "same-origin"
@@ -688,7 +706,21 @@ def api_void_transaction(id_transaction: int):
         conn.close()
 
 
+class NoBannerRequestHandler(WSGIRequestHandler):
+    """Hilangkan header Server (versi Werkzeug/Python) dari respons HTTP."""
+
+    def send_header(self, keyword: str, value: str) -> None:
+        if keyword.lower() == "server":
+            return
+        super().send_header(keyword, value)
+
+
 if __name__ == "__main__":
     init_db()
     port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port, debug=False)
+    app.run(
+        host="0.0.0.0",
+        port=port,
+        debug=False,
+        request_handler=NoBannerRequestHandler,
+    )

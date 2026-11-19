@@ -38,11 +38,14 @@ function showToast(message, type = 'success') {
   }, 2600);
 }
 
+function getTodayWib() {
+  return (document.body && document.body.dataset && document.body.dataset.today) || '';
+}
+
 function getSelectedDate() {
   const el = document.getElementById('filter-date');
   if (el && el.value) return el.value;
-  if (window.TODAY_WIB && window.TODAY_WIB !== 'undefined') return window.TODAY_WIB;
-  return '';
+  return getTodayWib();
 }
 
 // ---------------------------------------------------------------------------
@@ -829,7 +832,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const filterDate = document.getElementById('filter-date');
   filterDate.addEventListener('change', () => fetchReport(false));
   document.getElementById('btn-today').addEventListener('click', () => {
-    filterDate.value = window.TODAY_WIB;
+    filterDate.value = getTodayWib();
     fetchReport(false);
   });
   document.getElementById('btn-export-excel').addEventListener('click', handleExportExcel);

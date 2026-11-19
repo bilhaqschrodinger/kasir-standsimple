@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import http.client
 import io
 import json
 import os
@@ -13,10 +14,12 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from typing import Callable
 
 import openpyxl
+from werkzeug.serving import make_server
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT_DIR not in sys.path:
@@ -352,7 +355,53 @@ def _check_security(app_mod, threshold: float) -> dict:
             assert headers.get("X-Content-Type-Options") == "nosniff"
             assert headers.get("X-Frame-Options") == "SAMEORIGIN"
             assert headers.get("Referrer-Policy") == "same-origin"
+            assert headers.get("Strict-Transport-Security") == "max-age=31536000"
+            assert "geolocation=()" in headers.get("Permissions-Policy", "")
+            assert headers.get("X-XSS-Protection") == "1; mode=block"
             assert "no-store" in headers.get("Cache-Control", "")
+
+            csp = headers.get("Content-Security-Policy", "")
+            assert "default-src 'self'" in csp, "CSP missing default-src 'self'"
+            script_match = re.search(r"script-src\s+([^;]+)", csp)
+            assert script_match is not None, "CSP missing script-src"
+            script_src = script_match.group(1)
+            assert "'unsafe-inline'" not in script_src, "CSP script-src must not allow 'unsafe-inline'"
+            assert "'unsafe-eval'" not in script_src, "CSP script-src must not allow 'unsafe-eval'"
+
+    def check_no_inline_scripts() -> None:
+        html_text = _read_text(os.path.join("templates", "pos.html"))
+        for match in re.finditer(
+            r"<script\b([^>]*)>(.*?)</script>", html_text, re.IGNORECASE | re.DOTALL
+        ):
+            attrs, body = match.group(1), match.group(2).strip()
+            assert re.search(r"\bsrc\s*=", attrs, re.IGNORECASE) and not body, (
+                "Inline <script> block detected in templates/pos.html"
+            )
+
+    def check_no_server_banner() -> None:
+        srv = make_server(
+            "127.0.0.1",
+            0,
+            app_mod.app,
+            request_handler=app_mod.NoBannerRequestHandler,
+        )
+        thread = threading.Thread(target=srv.serve_forever, daemon=True)
+        thread.start()
+        try:
+            http_conn = http.client.HTTPConnection("127.0.0.1", srv.server_port, timeout=5)
+            http_conn.request("GET", "/")
+            resp = http_conn.getresponse()
+            resp.read()
+            headers_lower = {k.lower(): v for k, v in resp.getheaders()}
+            assert resp.status == 200, f"Expected 200 from live probe, got {resp.status}"
+            assert "server" not in headers_lower, (
+                f"Server banner leaked: {headers_lower.get('server')}"
+            )
+            http_conn.close()
+        finally:
+            srv.shutdown()
+            srv.server_close()
+            thread.join(timeout=2)
 
     def check_static_js_xss_patterns() -> None:
         js_text = _read_text(os.path.join("static", "js", "pos.js"))
@@ -389,6 +438,8 @@ def _check_security(app_mod, threshold: float) -> dict:
         [
             ("Excel formula injection sanitization", check_excel_formula_injection),
             ("HTTP security & cache headers", check_security_headers),
+            ("No inline scripts in HTML templates", check_no_inline_scripts),
+            ("No Werkzeug Server banner in HTTP responses", check_no_server_banner),
             ("Frontend static XSS audit", check_static_js_xss_patterns),
             ("No personal paths, secrets & DB gitignored", check_no_secrets_or_personal_paths),
         ],
