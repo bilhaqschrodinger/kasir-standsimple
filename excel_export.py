@@ -256,7 +256,7 @@ def _build_ringkasan_sheet(ws, data: dict) -> None:
     ws.title = "Ringkasan"
     ws.views.sheetView[0].showGridLines = True
 
-    ws.cell(row=1, column=1, value="Laporan Penjualan Harian — StandPOS").font = FONT_TITLE
+    ws.cell(row=1, column=1, value="Laporan Penjualan Harian — kasir-standsimple").font = FONT_TITLE
     ws.row_dimensions[1].height = 26
 
     ws.cell(row=2, column=1, value="Tanggal Laporan").font = FONT_META_LABEL
@@ -592,7 +592,7 @@ def _build_details_sheet(ws, data: dict) -> None:
 
 
 def build_daily_report_excel(tanggal: str, db_path: str | None = None) -> bytes:
-    """Bangun workbook Excel (.xlsx) laporan penjualan harian StandPOS untuk tanggal tertentu."""
+    """Bangun workbook Excel (.xlsx) laporan penjualan harian kasir-standsimple untuk tanggal tertentu."""
     data = _fetch_daily_data(tanggal, db_path=db_path)
 
     wb = Workbook()

@@ -37,7 +37,7 @@ if not exist ".venv\Scripts\python.exe" (
 
 ".venv\Scripts\python.exe" -c "import flask, openpyxl" >nul 2>&1
 if errorlevel 1 (
-    echo Menginstal dependensi StandPOS ^(Flask ^& openpyxl^)...
+    echo Menginstal dependensi kasir-standsimple ^(Flask ^& openpyxl^)...
     ".venv\Scripts\python.exe" -m pip install -r requirements.txt
     if errorlevel 1 (
         uv --version >nul 2>&1
@@ -57,7 +57,7 @@ if errorlevel 1 (
 if "%~1"=="--setup" exit /b 0
 
 echo.
-echo Menjalankan StandPOS di http://localhost:5000 ...
+echo Menjalankan kasir-standsimple di http://localhost:5000 ...
 echo ^(Tekan Ctrl+C atau tutup jendela ini untuk berhenti^)
 echo.
 ".venv\Scripts\python.exe" app.py

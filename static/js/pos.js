@@ -1,4 +1,4 @@
-// StandPOS — Antarmuka Terpadu (Kasir, Menu Cepat, Modal Harian, Omzet & Riwayat Database)
+// kasir-standsimple — Antarmuka Terpadu (Kasir, Menu Cepat, Modal Harian, Omzet & Riwayat Database)
 
 let menus = [];
 let cart = [];
@@ -788,7 +788,7 @@ async function handleExportExcel() {
     }
 
     const blob = await res.blob();
-    let filename = `StandPOS_Laporan_${dateStr}.xlsx`;
+    let filename = `kasir-standsimple_laporan_${dateStr}.xlsx`;
     const disposition = res.headers.get('Content-Disposition') || '';
     const matchUtf = disposition.match(/filename\*=UTF-8''([^;]+)/i);
     const matchPlain = disposition.match(/filename="?([^";]+)"?/i);

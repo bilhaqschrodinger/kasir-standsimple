@@ -18,7 +18,7 @@ if [ ! -x ".venv/bin/python" ]; then
 fi
 
 if ! .venv/bin/python -c "import flask, openpyxl" >/dev/null 2>&1; then
-    echo "Menginstal dependensi StandPOS (Flask & openpyxl)..."
+    echo "Menginstal dependensi kasir-standsimple (Flask & openpyxl)..."
     if .venv/bin/python -m pip --version >/dev/null 2>&1; then
         .venv/bin/python -m pip install -r requirements.txt
     elif command -v uv >/dev/null 2>&1; then
@@ -29,5 +29,5 @@ if ! .venv/bin/python -c "import flask, openpyxl" >/dev/null 2>&1; then
     fi
 fi
 
-echo "Menjalankan StandPOS di http://localhost:5000 ..."
+echo "Menjalankan kasir-standsimple di http://localhost:5000 ..."
 exec .venv/bin/python app.py

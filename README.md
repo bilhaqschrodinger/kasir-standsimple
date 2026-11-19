@@ -1,10 +1,10 @@
-# StandPOS
+# kasir-standsimple
 
 Aplikasi kasir web ringan, gratis, dan *offline-first* untuk stand makanan/minuman, booth kopi, atau bazaar sementara. Dirancang tampil dalam **satu layar kerja** tanpa login rumit dan tanpa biaya langganan bulanan.
 
 ---
 
-## Kenapa StandPOS?
+## Kenapa kasir-standsimple?
 
 - **Satu layar untuk semua:** Input pesanan, tombol menu cepat, ringkasan omzet, modal harian, hingga riwayat transaksi langsung terlihat di satu halaman utama.
 - **Berjalan lokal & offline-first:** Semua data tersimpan di file SQLite (`standpos.db`) yang otomatis dibuat saat aplikasi pertama kali dijalankan.
@@ -27,7 +27,7 @@ Aplikasi kasir web ringan, gratis, dan *offline-first* untuk stand makanan/minum
 - **Rincian & Pembatalan (Void)**
   - Klik baris transaksi untuk melihat detail item, lalu tandai `Void` jika terjadi salah input—nominalnya langsung dikeluarkan dari omzet tanpa menghapus histori.
 - **Export Laporan Excel (`.xlsx`) per Tanggal**
-  - Menghasilkan file `StandPOS_Laporan_YYYY-MM-DD.xlsx` berisi 3 sheet:
+  - Menghasilkan file `kasir-standsimple_laporan_YYYY-MM-DD.xlsx` berisi 3 sheet:
     1. **Ringkasan:** Jumlah transaksi `PAID`/`VOID`, total cup/item terjual, total omzet, Cash/QRIS/Transfer, modal harian, laba bersih, dan rekap penjualan per menu.
     2. **Riwayat Transaksi:** Daftar seluruh transaksi lengkap dengan status, kembalian, dan catatan (baris `VOID` ditandai coret).
     3. **Rincian Item:** Pecahan setiap baris item terjual per transaksi.
@@ -68,7 +68,7 @@ python app.py
 ## Struktur Proyek
 
 ```text
-standpos/
+kasir-standsimple/
 ├── app.py               # Server Flask & REST API JSON
 ├── db.py                # Koneksi SQLite, helper waktu WIB & skema tabel
 ├── excel_export.py      # Generator laporan Excel (.xlsx) 3 sheet

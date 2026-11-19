@@ -631,7 +631,7 @@ def api_export_excel():
         io.BytesIO(xlsx_bytes),
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         as_attachment=True,
-        download_name=f"StandPOS_Laporan_{tanggal}.xlsx",
+        download_name=f"kasir-standsimple_laporan_{tanggal}.xlsx",
     )
 
 

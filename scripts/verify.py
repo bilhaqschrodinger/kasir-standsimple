@@ -1,4 +1,4 @@
-"""Verification & Quality Assurance runner for StandPOS."""
+"""Verification & Quality Assurance runner for kasir-standsimple."""
 
 from __future__ import annotations
 
@@ -256,7 +256,7 @@ def _check_code_correctness(app_mod, db_mod, tmp_dir: str, threshold: float) -> 
         resp = client.get(f"/api/export/excel?date={today}")
         assert resp.status_code == 200
         assert "spreadsheetml.sheet" in resp.headers.get("Content-Type", "")
-        assert f"StandPOS_Laporan_{today}.xlsx" in resp.headers.get("Content-Disposition", "")
+        assert f"kasir-standsimple_laporan_{today}.xlsx" in resp.headers.get("Content-Disposition", "")
 
         wb = openpyxl.load_workbook(io.BytesIO(resp.data))
         assert wb.sheetnames == ["Ringkasan", "Riwayat Transaksi", "Rincian Item"]
@@ -615,7 +615,7 @@ def run_verification(threshold: float) -> dict:
 
 def _print_table(report: dict) -> None:
     status_label = "PASSED" if report["passed"] else "FAILED"
-    print("StandPOS Verification & Quality Assurance")
+    print("kasir-standsimple Verification & Quality Assurance")
     print("=" * 56)
     print(
         f"Overall Score : {report['overallScore']:.4f} "
@@ -634,7 +634,7 @@ def _print_table(report: dict) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="StandPOS Verification & QA Suite")
+    parser = argparse.ArgumentParser(description="kasir-standsimple Verification & QA Suite")
     parser.add_argument(
         "--threshold",
         type=float,
