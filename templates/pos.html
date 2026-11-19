@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>StandPOS</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    :root {
+      --bg-canvas: #F6F5F2;
+      --bg-surface: #FFFFFF;
+      --ink-primary: #18181B;
+      --ink-muted: #71717A;
+      --line-rule: #E4E4E7;
+    }
+    body {
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: var(--bg-canvas);
+      color: var(--ink-primary);
+      -webkit-font-smoothing: antialiased;
+    }
+    .num {
+      font-family: 'JetBrains Mono', monospace;
+      font-variant-numeric: tabular-nums;
+    }
+    input[type="number"]::-webkit-inner-spin-button,
+    input[type="number"]::-webkit-outer-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+    input[type="number"] {
+      -moz-appearance: textfield;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col selection:bg-zinc-900 selection:text-white">
+
+  <!-- Notifikasi Singkat -->
+  <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none px-4 sm:px-0"></div>
+
+  <!-- Baris Atas: Ringkasan Database SQLite & Input Modal Harian Langsung -->
+  <header class="bg-white border-b border-zinc-300">
+    <div class="max-w-[1440px] mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-4">
+      <div class="flex items-center gap-4">
+        <h1 class="text-lg font-bold tracking-tight text-zinc-900">StandPOS</h1>
+        <div class="h-4 w-px bg-zinc-300"></div>
+        <div class="flex items-center gap-2">
+          <label for="filter-date" class="text-xs font-medium text-zinc-500">Tanggal</label>
+          <input
+            id="filter-date"
+            type="date"
+            value="{{ today }}"
+            class="num h-9 px-2.5 text-xs font-semibold bg-zinc-50 border border-zinc-300 rounded text-zinc-900 focus:outline-none focus:border-zinc-900"
+          />
+          <button
+            id="btn-today"
+            type="button"
+            class="h-9 px-2.5 text-xs font-semibold text-zinc-700 bg-zinc-100 hover:bg-zinc-200 rounded transition"
+          >
+            Hari ini
+          </button>
+        </div>
+      </div>
+
+      <!-- Input Modal Harian Langsung di Atas -->
+      <form id="form-capital-inline" class="flex items-center gap-2">
+        <label for="input-capital-inline" class="text-xs font-semibold text-zinc-600">Modal harian (Rp):</label>
+        <input
+          id="input-capital-inline"
+          type="number"
+          inputmode="numeric"
+          min="0"
+          step="1"
+          placeholder="Isi modal..."
+          class="num h-9 w-36 px-2.5 text-sm font-semibold bg-zinc-50 border border-zinc-300 rounded text-zinc-900 focus:outline-none focus:border-zinc-900"
+        />
+        <button
+          id="btn-save-capital-inline"
+          type="submit"
+          class="h-9 px-3 text-xs font-semibold text-white bg-zinc-900 hover:bg-zinc-800 rounded transition"
+        >
+          Simpan modal
+        </button>
+      </form>
+    </div>
+
+    <!-- Strip Ringkasan Omzet & Transaksi Masuk dari Database -->
+    <div class="border-t border-zinc-200 bg-zinc-50">
+      <div class="max-w-[1440px] mx-auto grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 divide-y sm:divide-y-0 sm:divide-x divide-zinc-200">
+        <div class="px-4 sm:px-5 py-3">
+          <p class="text-xs text-zinc-500">Transaksi masuk</p>
+          <p id="metric-jumlah" class="num text-lg sm:text-xl font-bold text-zinc-900 mt-0.5">0</p>
+        </div>
+        <div class="px-4 sm:px-5 py-3">
+          <p class="text-xs text-zinc-500">Total omzet</p>
+          <p id="metric-pendapatan" class="num text-lg sm:text-xl font-bold text-zinc-900 mt-0.5">Rp 0</p>
+        </div>
+        <div class="px-4 sm:px-5 py-3">
+          <p class="text-xs text-zinc-500">Cash</p>
+          <p id="metric-cash" class="num text-base sm:text-lg font-semibold text-emerald-800 mt-0.5">Rp 0</p>
+        </div>
+        <div class="px-4 sm:px-5 py-3">
+          <p class="text-xs text-zinc-500">QRIS</p>
+          <p id="metric-qris" class="num text-base sm:text-lg font-semibold text-blue-800 mt-0.5">Rp 0</p>
+        </div>
+        <div class="px-4 sm:px-5 py-3">
+          <p class="text-xs text-zinc-500">Transfer (TF)</p>
+          <p id="metric-tf" class="num text-base sm:text-lg font-semibold text-indigo-800 mt-0.5">Rp 0</p>
+        </div>
+        <div class="px-4 sm:px-5 py-3">
+          <p class="text-xs text-zinc-500">Laba bersih (Omzet − Modal)</p>
+          <p id="metric-laba" class="num text-base sm:text-lg font-bold text-zinc-900 mt-0.5">Rp 0</p>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Area Kerja Utama: Kasir + Keranjang + Riwayat Database -->
+  <main class="flex-1 max-w-[1440px] w-full mx-auto px-4 sm:px-6 py-5 space-y-6">
+
+    <!-- Baris 1: Kasir 2 Kolom (Input & Tombol Menu di Kiri, Pesanan & Bayar di Kanan) -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 border border-zinc-300 bg-white">
+
+      <!-- Kolom Kiri (7 Kolom): Input Menu/Pesanan & Tombol Menu Tersimpan -->
+      <section class="lg:col-span-7 flex flex-col justify-between border-b lg:border-b-0 lg:border-r border-zinc-300">
+
+        <!-- Form Input Menu & Harga (Bisa langsung masuk pesanan, langsung bayar, atau simpan jadi tombol) -->
+        <div class="p-4 sm:p-5 border-b border-zinc-200 bg-zinc-50/60">
+          <h2 class="text-sm font-bold text-zinc-900 mb-3">Input menu / pesanan</h2>
+          <form id="form-custom-item" class="space-y-3">
+            <div class="grid grid-cols-1 sm:grid-cols-12 gap-2.5">
+              <div class="sm:col-span-7">
+                <label for="custom-nama" class="block text-xs font-medium text-zinc-600 mb-1">Nama menu / pesanan</label>
+                <input
+                  id="custom-nama"
+                  type="text"
+                  placeholder="Contoh: Kopi Susu Aren"
+                  class="w-full h-12 px-3.5 text-base font-medium bg-white border border-zinc-300 rounded focus:outline-none focus:border-zinc-900"
+                />
+              </div>
+              <div class="sm:col-span-5">
+                <label for="custom-harga" class="block text-xs font-medium text-zinc-600 mb-1">Harga satuan (Rp)</label>
+                <input
+                  id="custom-harga"
+                  type="number"
+                  inputmode="numeric"
+                  min="1"
+                  step="1"
+                  placeholder="Contoh: 18000"
+                  class="num w-full h-12 px-3.5 text-base font-bold bg-white border border-zinc-300 rounded focus:outline-none focus:border-zinc-900"
+                />
+              </div>
+            </div>
+
+            <div class="flex flex-wrap gap-2">
+              <button
+                id="btn-add-custom"
+                type="submit"
+                class="h-11 px-4 bg-zinc-900 hover:bg-zinc-800 text-white font-semibold text-sm rounded transition"
+              >
+                + Masukkan ke pesanan
+              </button>
+              <button
+                id="btn-save-as-menu"
+                type="button"
+                class="h-11 px-4 bg-white hover:bg-zinc-100 text-zinc-800 border border-zinc-300 font-semibold text-sm rounded transition"
+              >
+                Simpan jadi tombol menu tetap
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Daftar Tombol Menu Cepat -->
+        <div class="p-4 sm:p-5 flex-1">
+          <div class="flex items-center justify-between mb-3">
+            <h2 class="text-sm font-bold text-zinc-900">Tombol menu cepat (klik untuk tambah ke pesanan)</h2>
+            <span id="menu-count-label" class="num text-xs text-zinc-500">0 menu</span>
+          </div>
+
+          <div id="pos-menu-grid" class="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+            <!-- Dirender oleh pos.js -->
+          </div>
+
+          <div id="pos-menu-empty" class="hidden py-8 px-4 text-center border border-dashed border-zinc-300 bg-zinc-50/40">
+            <p class="text-xs text-zinc-500">Belum ada tombol menu tetap. Ketik nama & harga di atas lalu klik <strong>"Simpan jadi tombol menu tetap"</strong> jika ingin membuat tombol pintasan.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Kolom Kanan (5 Kolom): Rincian Pesanan & Tombol Bayar -->
+      <section class="lg:col-span-5 flex flex-col justify-between bg-white">
+        <div class="p-4 sm:p-5 flex-1 flex flex-col">
+          <div class="flex items-center justify-between pb-3 border-b border-zinc-200">
+            <div class="flex items-baseline gap-2">
+              <h2 class="text-sm font-bold text-zinc-900">Rincian pesanan</h2>
+              <span id="cart-item-count" class="num text-xs text-zinc-500">0 item</span>
+            </div>
+            <button
+              id="btn-clear-cart"
+              type="button"
+              disabled
+              class="text-xs font-semibold text-red-700 hover:text-red-900 disabled:opacity-30 disabled:pointer-events-none transition"
+            >
+              Kosongkan
+            </button>
+          </div>
+
+          <!-- Daftar Keranjang -->
+          <div id="cart-list" class="divide-y divide-zinc-200 max-h-[340px] overflow-y-auto flex-1">
+            <!-- Dirender oleh pos.js -->
+          </div>
+
+          <!-- Indikator jika user sedang mengetik di input kiri dan belum klik tambah -->
+          <div id="draft-item-notice" class="hidden py-3 px-3 my-2 bg-zinc-100 border border-zinc-300 text-xs flex items-center justify-between">
+            <span id="draft-item-text" class="font-medium text-zinc-800"></span>
+            <span class="text-zinc-500">Siap dibayar langsung</span>
+          </div>
+
+          <div id="cart-empty" class="py-12 text-center">
+            <p class="text-xs text-zinc-400">Ketik menu & harga di kiri atau klik tombol menu untuk membayar.</p>
+          </div>
+        </div>
+
+        <!-- Panel Total & Tombol Pembayaran -->
+        <div class="p-4 sm:p-5 border-t border-zinc-300 bg-zinc-50 space-y-4">
+          <div class="flex items-baseline justify-between">
+            <span class="text-sm font-semibold text-zinc-600">Total bayar</span>
+            <span id="cart-total" class="num text-2xl sm:text-3xl font-bold text-zinc-900">Rp 0</span>
+          </div>
+
+          <div class="grid grid-cols-3 gap-2.5">
+            <button
+              id="btn-pay-cash"
+              type="button"
+              disabled
+              class="min-h-[56px] bg-emerald-700 hover:bg-emerald-800 disabled:bg-zinc-200 disabled:text-zinc-400 disabled:cursor-not-allowed text-white font-semibold text-sm sm:text-base rounded transition px-2"
+            >
+              Bayar Cash
+            </button>
+            <button
+              id="btn-pay-qris"
+              type="button"
+              disabled
+              class="min-h-[56px] bg-blue-700 hover:bg-blue-800 disabled:bg-zinc-200 disabled:text-zinc-400 disabled:cursor-not-allowed text-white font-semibold text-sm sm:text-base rounded transition px-2"
+            >
+              Bayar QRIS
+            </button>
+            <button
+              id="btn-pay-tf"
+              type="button"
+              disabled
+              class="min-h-[56px] bg-indigo-700 hover:bg-indigo-800 disabled:bg-zinc-200 disabled:text-zinc-400 disabled:cursor-not-allowed text-white font-semibold text-sm sm:text-base rounded transition px-2"
+            >
+              Bayar TF
+            </button>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- Baris 2: Riwayat Transaksi Database SQLite (Langsung Terlihat) -->
+    <section class="border border-zinc-300 bg-white">
+      <div class="px-4 sm:px-5 py-3.5 border-b border-zinc-200 flex flex-wrap items-center justify-between gap-2">
+        <div class="flex items-baseline gap-3">
+          <h2 class="text-sm font-bold text-zinc-900">Riwayat transaksi masuk (Database)</h2>
+          <span id="last-updated" class="num text-xs text-zinc-400"></span>
+        </div>
+        <button
+          id="btn-export-excel"
+          type="button"
+          class="h-9 px-3 text-xs font-semibold text-zinc-800 bg-white hover:bg-zinc-100 border border-zinc-300 rounded transition disabled:opacity-50"
+        >
+          Export Excel
+        </button>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-left border-collapse min-w-[680px]">
+          <thead>
+            <tr class="border-b border-zinc-200 bg-zinc-50 text-xs font-semibold text-zinc-600">
+              <th class="py-3 px-4 w-20">No</th>
+              <th class="py-3 px-4 w-28">Jam</th>
+              <th class="py-3 px-4">Pesanan</th>
+              <th class="py-3 px-4 w-28">Metode</th>
+              <th class="py-3 px-4 w-44">Catatan</th>
+              <th class="py-3 px-4 w-36 text-right">Total</th>
+              <th class="py-3 px-4 w-28 text-right">Aksi</th>
+            </tr>
+          </thead>
+          <tbody id="trx-table-body" class="divide-y divide-zinc-200 text-sm">
+            <!-- Dirender oleh pos.js -->
+          </tbody>
+        </table>
+      </div>
+
+      <div id="trx-empty" class="hidden py-10 text-center text-xs text-zinc-400">
+        Belum ada transaksi masuk pada tanggal ini.
+      </div>
+    </section>
+
+  </main>
+
+  <!-- MODAL PEMBAYARAN CASH -->
+  <div id="modal-cash" class="fixed inset-0 bg-zinc-950/50 z-40 hidden items-center justify-center p-4">
+    <div class="bg-white border border-zinc-300 max-w-md w-full p-5 sm:p-6 space-y-4">
+      <div class="flex items-center justify-between border-b border-zinc-200 pb-3">
+        <h3 class="text-base font-bold text-zinc-900">Pembayaran Cash</h3>
+        <button id="btn-close-cash" type="button" class="text-xs font-semibold text-zinc-500 hover:text-zinc-900">Tutup</button>
+      </div>
+
+      <div class="flex items-baseline justify-between py-2 border-b border-zinc-200">
+        <span class="text-sm text-zinc-600">Total tagihan</span>
+        <span id="cash-modal-total" class="num text-2xl font-bold text-zinc-900">Rp 0</span>
+      </div>
+
+      <form id="form-cash" class="space-y-4">
+        <div>
+          <label for="input-uang-diterima" class="block text-xs font-medium text-zinc-600 mb-1">
+            Uang diterima (opsional, kosongkan jika uang pas)
+          </label>
+          <input
+            id="input-uang-diterima"
+            type="number"
+            inputmode="numeric"
+            min="0"
+            step="1"
+            placeholder="Kosongkan jika uang pas"
+            class="num w-full h-12 px-3.5 text-lg font-bold border border-zinc-300 rounded focus:outline-none focus:border-zinc-900"
+          />
+          <div class="flex flex-wrap gap-1.5 mt-2">
+            <button type="button" data-nominal="pas" class="btn-quick-cash px-2.5 py-1.5 text-xs font-semibold bg-zinc-100 hover:bg-zinc-200 text-zinc-800 rounded">Uang pas</button>
+            <button type="button" data-nominal="20000" class="btn-quick-cash num px-2.5 py-1.5 text-xs font-semibold bg-zinc-100 hover:bg-zinc-200 text-zinc-800 rounded">20.000</button>
+            <button type="button" data-nominal="50000" class="btn-quick-cash num px-2.5 py-1.5 text-xs font-semibold bg-zinc-100 hover:bg-zinc-200 text-zinc-800 rounded">50.000</button>
+            <button type="button" data-nominal="100000" class="btn-quick-cash num px-2.5 py-1.5 text-xs font-semibold bg-zinc-100 hover:bg-zinc-200 text-zinc-800 rounded">100.000</button>
+          </div>
+        </div>
+
+        <div class="flex items-baseline justify-between py-3 px-3.5 bg-zinc-50 border border-zinc-200">
+          <span class="text-sm font-medium text-zinc-700">Kembalian</span>
+          <span id="cash-modal-kembalian" class="num text-xl font-bold text-emerald-700">Rp 0</span>
+        </div>
+
+        <p id="cash-error" class="text-red-700 text-xs font-semibold hidden"></p>
+
+        <div class="flex gap-2.5 pt-1">
+          <button
+            id="btn-cancel-cash"
+            type="button"
+            class="flex-1 min-h-[50px] bg-zinc-100 hover:bg-zinc-200 text-zinc-800 font-semibold text-sm rounded transition"
+          >
+            Batal
+          </button>
+          <button
+            id="btn-confirm-cash"
+            type="submit"
+            class="flex-1 min-h-[50px] bg-emerald-700 hover:bg-emerald-800 disabled:bg-zinc-200 disabled:text-zinc-400 text-white font-semibold text-sm rounded transition"
+          >
+            Simpan pembayaran
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL PEMBAYARAN QRIS / TF -->
+  <div id="modal-digital" class="fixed inset-0 bg-zinc-950/50 z-40 hidden items-center justify-center p-4">
+    <div class="bg-white border border-zinc-300 max-w-md w-full p-5 sm:p-6 space-y-4">
+      <div class="flex items-center justify-between border-b border-zinc-200 pb-3">
+        <h3 id="digital-title" class="text-base font-bold text-zinc-900">Pembayaran QRIS</h3>
+        <button id="btn-close-digital" type="button" class="text-xs font-semibold text-zinc-500 hover:text-zinc-900">Tutup</button>
+      </div>
+
+      <p id="digital-confirm-text" class="text-sm sm:text-base font-semibold text-zinc-900 py-2 border-b border-zinc-200">
+        Total Rp 0. Sudah cek pembayaran masuk di HP/m-banking?
+      </p>
+
+      <form id="form-digital" class="space-y-4">
+        <div>
+          <label for="input-catatan-bayar" class="block text-xs font-medium text-zinc-600 mb-1">
+            Catatan atau nama pengirim (opsional)
+          </label>
+          <input
+            id="input-catatan-bayar"
+            type="text"
+            placeholder="Contoh: a.n. Budi"
+            class="w-full h-12 px-3.5 text-sm border border-zinc-300 rounded focus:outline-none focus:border-zinc-900"
+          />
+        </div>
+
+        <div class="flex gap-2.5 pt-1">
+          <button
+            id="btn-cancel-digital"
+            type="button"
+            class="flex-1 min-h-[50px] bg-zinc-100 hover:bg-zinc-200 text-zinc-800 font-semibold text-sm rounded transition"
+          >
+            Batal
+          </button>
+          <button
+            id="btn-confirm-digital"
+            type="submit"
+            class="flex-1 min-h-[50px] bg-blue-700 hover:bg-blue-800 disabled:bg-zinc-200 text-white font-semibold text-sm rounded transition"
+          >
+            Sudah masuk
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL RINCIAN TRANSAKSI -->
+  <div id="modal-detail" class="fixed inset-0 bg-zinc-950/50 z-40 hidden items-center justify-center p-4">
+    <div class="bg-white border border-zinc-300 max-w-md w-full p-5 sm:p-6 space-y-4">
+      <div class="flex items-center justify-between border-b border-zinc-200 pb-3">
+        <div>
+          <h3 id="detail-title" class="num text-base font-bold text-zinc-900">Transaksi #0</h3>
+          <p id="detail-waktu" class="num text-xs text-zinc-500 mt-0.5"></p>
+        </div>
+        <button id="btn-close-detail" type="button" class="text-xs font-semibold text-zinc-500 hover:text-zinc-900">Tutup</button>
+      </div>
+
+      <div class="grid grid-cols-2 gap-3 text-xs bg-zinc-50 p-3 border border-zinc-200">
+        <div>
+          <span class="text-zinc-500 block">Metode bayar</span>
+          <span id="detail-metode" class="font-bold text-zinc-900 mt-0.5 block">-</span>
+        </div>
+        <div>
+          <span class="text-zinc-500 block">Status</span>
+          <span id="detail-status" class="font-bold mt-0.5 block">-</span>
+        </div>
+        <div id="detail-catatan-box" class="col-span-2 hidden pt-2 border-t border-zinc-200">
+          <span class="text-zinc-500 block">Catatan</span>
+          <span id="detail-catatan" class="font-semibold text-zinc-900 mt-0.5 block">-</span>
+        </div>
+        <div id="detail-cash-box" class="col-span-2 hidden grid-cols-2 gap-2 pt-2 border-t border-zinc-200">
+          <div>
+            <span class="text-zinc-500 block">Uang diterima</span>
+            <span id="detail-uang-diterima" class="num font-semibold text-zinc-900 mt-0.5 block">-</span>
+          </div>
+          <div>
+            <span class="text-zinc-500 block">Kembalian</span>
+            <span id="detail-kembalian" class="num font-semibold text-emerald-700 mt-0.5 block">-</span>
+          </div>
+        </div>
+      </div>
+
+      <div id="detail-items-list" class="divide-y divide-zinc-200 border-t border-b border-zinc-200 max-h-60 overflow-y-auto">
+        <!-- Dirender oleh pos.js -->
+      </div>
+
+      <div class="flex items-baseline justify-between">
+        <span class="text-sm font-semibold text-zinc-700">Total</span>
+        <span id="detail-total" class="num text-xl font-bold text-zinc-900">Rp 0</span>
+      </div>
+
+      <div class="flex gap-2.5 pt-2">
+        <button
+          id="btn-close-detail-bottom"
+          type="button"
+          class="flex-1 h-11 bg-zinc-100 hover:bg-zinc-200 text-zinc-800 font-semibold text-sm rounded transition"
+        >
+          Tutup
+        </button>
+        <button
+          id="btn-void-trx"
+          type="button"
+          class="flex-1 h-11 bg-red-700 hover:bg-red-800 text-white font-semibold text-sm rounded transition"
+        >
+          Batalkan (Void)
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    window.TODAY_WIB = "{{ today }}";
+  </script>
+  <script src="/static/js/pos.js?v=5"></script>
+</body>
+</html>
