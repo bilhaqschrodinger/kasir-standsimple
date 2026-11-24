@@ -83,22 +83,71 @@ def _check_code_correctness(app_mod, db_mod, tmp_dir: str, threshold: float) -> 
         node_bin = shutil.which("node")
         if not node_bin:
             return
-        js_path = os.path.join(ROOT_DIR, "static", "js", "pos.js")
+        for rel in (
+            "sw.js",
+            os.path.join("static", "js", "store.js"),
+            os.path.join("static", "js", "xlsx_builder.js"),
+            os.path.join("static", "js", "pos.js"),
+        ):
+            js_path = os.path.join(ROOT_DIR, rel)
+            proc = subprocess.run(
+                [node_bin, "--check", js_path],
+                capture_output=True,
+                text=True,
+                timeout=15,
+                check=False,
+            )
+            assert proc.returncode == 0, f"{rel}: {proc.stderr.strip() or 'JS syntax check failed'}"
+
+    def check_client_xlsx_builder() -> None:
+        node_bin = shutil.which("node")
+        if not node_bin:
+            return
+        xlsx_js = os.path.join(ROOT_DIR, "static", "js", "xlsx_builder.js").replace("\\", "/")
+        out_xlsx = os.path.join(tmp_dir, "client_test.xlsx").replace("\\", "/")
+        script = (
+            f"const fs = require('fs');\n"
+            f"const bx = require({json.dumps(xlsx_js)});\n"
+            "const bytes = bx.buildDailyReportXlsxBytes({\n"
+            "  tanggal: '2026-11-24', exported_at: '2026-11-24T19:00:00',\n"
+            "  jumlah_paid: 1, jumlah_void: 0, total_item_terjual: 2,\n"
+            "  total_pendapatan: 36000, total_cash: 36000, total_qris: 0, total_tf: 0,\n"
+            "  rata_rata_trx: 36000, modal_awal: 10000, laba_bersih: 26000,\n"
+            "  item_breakdown: [{nama_item: '=1+1', qty: 2, total: 36000}],\n"
+            "  transactions: [{id_transaction: 1, jam_wib: '12:00:00', status: 'PAID', metode_bayar: 'CASH', ringkasan: '=1+1 x2', total_harga: 36000, uang_diterima: 50000, kembalian: 14000, catatan_bayar: '+CMD'}],\n"
+            "  detail_lines: [{id_transaction: 1, jam_wib: '12:00:00', status: 'PAID', metode_bayar: 'CASH', nama_item: '=1+1', harga_satuan: 18000, qty: 2, subtotal: 36000}]\n"
+            "});\n"
+            f"fs.writeFileSync({json.dumps(out_xlsx)}, Buffer.from(bytes));\n"
+        )
         proc = subprocess.run(
-            [node_bin, "--check", js_path],
+            [node_bin, "-e", script],
             capture_output=True,
             text=True,
             timeout=15,
             check=False,
         )
-        assert proc.returncode == 0, proc.stderr.strip() or "JS syntax check failed"
+        assert proc.returncode == 0, proc.stderr.strip() or "Client xlsx_builder failed"
+        wb = openpyxl.load_workbook(out_xlsx)
+        assert wb.sheetnames == ["Ringkasan", "Riwayat Transaksi", "Rincian Item"]
+        assert str(wb["Ringkasan"].cell(row=20, column=2).value).startswith("'")
+        assert wb["Riwayat Transaksi"].cell(row=2, column=6).value == 36000
+        assert wb["Rincian Item"].cell(row=2, column=8).value == 36000
 
     def check_html_routes() -> None:
-        for route in ("/", "/admin", "/dashboard"):
+        for route in ("/", "/admin", "/dashboard", "/manifest.json", "/sw.js"):
             resp = client.get(route)
             assert resp.status_code == 200, f"{route} returned {resp.status_code}"
+        manifest = json.loads(_read_text("manifest.json"))
+        assert manifest.get("name") == "kasir-standsimple"
         body = client.get("/").data
-        for marker in (b"btn-export-excel", b"btn-pay-cash", b"btn-pay-qris", b"btn-pay-tf"):
+        for marker in (
+            b"btn-export-excel",
+            b"btn-backup-json",
+            b"btn-restore-json",
+            b"btn-pay-cash",
+            b"btn-pay-qris",
+            b"btn-pay-tf",
+        ):
             assert marker in body, f"Missing UI element {marker!r}"
 
     def check_menu_crud_and_validation() -> None:
@@ -292,7 +341,8 @@ def _check_code_correctness(app_mod, db_mod, tmp_dir: str, threshold: float) -> 
         [
             ("Python syntax compilation", check_py_compile),
             ("JavaScript syntax check", check_js_syntax),
-            ("HTML routes & controls", check_html_routes),
+            ("Client-side Excel (.xlsx) generator", check_client_xlsx_builder),
+            ("HTML & PWA routes & controls", check_html_routes),
             ("Menu CRUD & validation", check_menu_crud_and_validation),
             ("Capital input & date validation", check_capital_validation),
             ("Checkout calculation & atomicity", check_checkout_and_atomicity),
@@ -369,13 +419,13 @@ def _check_security(app_mod, threshold: float) -> dict:
             assert "'unsafe-eval'" not in script_src, "CSP script-src must not allow 'unsafe-eval'"
 
     def check_no_inline_scripts() -> None:
-        html_text = _read_text(os.path.join("templates", "pos.html"))
+        html_text = _read_text("index.html")
         for match in re.finditer(
             r"<script\b([^>]*)>(.*?)</script>", html_text, re.IGNORECASE | re.DOTALL
         ):
             attrs, body = match.group(1), match.group(2).strip()
             assert re.search(r"\bsrc\s*=", attrs, re.IGNORECASE) and not body, (
-                "Inline <script> block detected in templates/pos.html"
+                "Inline <script> block detected in index.html"
             )
 
     def check_no_server_banner() -> None:
@@ -404,23 +454,34 @@ def _check_security(app_mod, threshold: float) -> dict:
             thread.join(timeout=2)
 
     def check_static_js_xss_patterns() -> None:
-        js_text = _read_text(os.path.join("static", "js", "pos.js"))
-        for idx, line in enumerate(js_text.splitlines(), start=1):
-            if "innerHTML" in line and not re.search(r"innerHTML\s*=\s*''\s*;", line):
-                raise AssertionError(f"Unsafe innerHTML assignment at pos.js:{idx}")
-            if re.search(r"\b(eval|document\.write)\s*\(", line):
-                raise AssertionError(f"Unsafe sink at pos.js:{idx}")
+        for rel in (
+            "sw.js",
+            os.path.join("static", "js", "store.js"),
+            os.path.join("static", "js", "xlsx_builder.js"),
+            os.path.join("static", "js", "pos.js"),
+        ):
+            js_text = _read_text(rel)
+            for idx, line in enumerate(js_text.splitlines(), start=1):
+                if "innerHTML" in line and not re.search(r"innerHTML\s*=\s*''\s*;", line):
+                    raise AssertionError(f"Unsafe innerHTML assignment at {rel}:{idx}")
+                if re.search(r"\b(eval|document\.write)\s*\(", line):
+                    raise AssertionError(f"Unsafe sink at {rel}:{idx}")
 
     def check_no_secrets_or_personal_paths() -> None:
         files_to_scan = [
             "app.py",
             "db.py",
             "excel_export.py",
+            "index.html",
+            "manifest.json",
+            "sw.js",
+            "vercel.json",
             "README.md",
             "run.bat",
             "share.bat",
             "run.sh",
-            os.path.join("templates", "pos.html"),
+            os.path.join("static", "js", "store.js"),
+            os.path.join("static", "js", "xlsx_builder.js"),
             os.path.join("static", "js", "pos.js"),
         ]
         secret_rx = re.compile(r"(sk-[A-Za-z0-9]{20,}|ghp_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16})")
@@ -517,6 +578,10 @@ def _check_best_practices(threshold: float) -> dict:
 
     def check_module_layout() -> None:
         required = [
+            "index.html",
+            "manifest.json",
+            "sw.js",
+            "vercel.json",
             "app.py",
             "db.py",
             "excel_export.py",
@@ -524,7 +589,9 @@ def _check_best_practices(threshold: float) -> dict:
             "run.bat",
             "share.bat",
             "run.sh",
-            os.path.join("templates", "pos.html"),
+            os.path.join("static", "icons", "icon.svg"),
+            os.path.join("static", "js", "store.js"),
+            os.path.join("static", "js", "xlsx_builder.js"),
             os.path.join("static", "js", "pos.js"),
         ]
         for rel in required:

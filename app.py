@@ -2,7 +2,7 @@ import io
 import os
 import re
 from datetime import datetime
-from flask import Flask, jsonify, redirect, render_template, request, send_file
+from flask import Flask, jsonify, redirect, request, send_file, send_from_directory
 from werkzeug.exceptions import HTTPException
 from werkzeug.serving import WSGIRequestHandler
 
@@ -131,11 +131,25 @@ def internal_error(e):
 # ---------------------------------------------------------------------------
 # Halaman Utama Terpadu (Kasir + Menu + Omzet + Riwayat dalam 1 layar)
 # ---------------------------------------------------------------------------
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+
 @app.route("/")
+@app.route("/index.html")
 @app.route("/admin")
 @app.route("/dashboard")
 def pos_page():
-    return render_template("pos.html", today=today_wib_str())
+    return send_from_directory(BASE_DIR, "index.html")
+
+
+@app.route("/manifest.json")
+def pwa_manifest():
+    return send_from_directory(BASE_DIR, "manifest.json", mimetype="application/manifest+json")
+
+
+@app.route("/sw.js")
+def pwa_service_worker():
+    return send_from_directory(BASE_DIR, "sw.js", mimetype="application/javascript")
 
 
 # ---------------------------------------------------------------------------

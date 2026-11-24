@@ -1,15 +1,15 @@
 # kasir-standsimple
 
-Aplikasi kasir web ringan, gratis, dan *offline-first* untuk stand makanan/minuman, booth kopi, atau bazaar sementara. Dirancang tampil dalam **satu layar kerja** tanpa login rumit dan tanpa biaya langganan bulanan.
+Aplikasi kasir web ringan, gratis, dan *offline-first* (PWA) untuk stand makanan/minuman, booth kopi, atau bazaar sementara. Dirancang tampil dalam **satu layar kerja** tanpa login rumit dan tanpa biaya langganan bulanan.
 
 ---
 
 ## Kenapa kasir-standsimple?
 
 - **Satu layar untuk semua:** Input pesanan, tombol menu cepat, ringkasan omzet, modal harian, hingga riwayat transaksi langsung terlihat di satu halaman utama.
-- **Berjalan lokal & offline-first:** Semua data tersimpan di file SQLite (`standpos.db`) yang otomatis dibuat saat aplikasi pertama kali dijalankan.
-- **Setup minimal:** Tidak butuh database server terpisah (MySQL/PostgreSQL). Cukup Python 3.10+.
-- **Siap rekap ke Excel:** Ekspor laporan harian rapi berbentuk file `.xlsx` asli (3 sheet siap cetak/kirim ke partner).
+- **Privasi 100% di perangkat sendiri:** Semua menu, modal, dan transaksi tersimpan langsung di browser perangkat pengguna (`IndexedDB` + fallback `localStorage`). Tidak ada server pusat yang mengintip data penjualan siapa pun.
+- **Bisa di-install di HP & jalan offline (PWA):** Buka sekali di browser HP lalu pilih *Add to Home Screen* / *Install*, aplikasi tetap jalan meski sinyal di lokasi stand/bazaar mati.
+- **Siap rekap ke Excel & Backup:** Ekspor laporan harian rapi berbentuk file `.xlsx` asli (3 sheet) langsung dari browser tanpa internet, plus tombol **Backup Data / Pulihkan** (`.json`).
 
 ---
 
@@ -34,7 +34,16 @@ Aplikasi kasir web ringan, gratis, dan *offline-first* untuk stand makanan/minum
 
 ---
 
-## Cara Menjalankan
+## Deploy Gratis (GitHub Pages / Vercel)
+
+Karena aplikasi ini berjalan penuh di sisi perangkat pengguna (*static PWA*), kamu bisa langsung men-deploy-nya gratis tanpa database server:
+
+- **GitHub Pages:** Buka **Settings → Pages** di repo GitHub, pilih **Deploy from a branch** → branch `main` → folder `/ (root)` → **Save**.
+- **Vercel:** Import repo ini di dashboard Vercel (tidak perlu build command khusus, langsung sajikan `index.html`).
+
+---
+
+## Cara Menjalankan di Lokal (Opsional)
 
 ### Opsi 1: Windows (Klik 2x)
 1. Pastikan [Python 3.10+](https://www.python.org/downloads/) sudah terpasang (centang **"Add Python to PATH"** saat instalasi).
@@ -69,20 +78,26 @@ python app.py
 
 ```text
 kasir-standsimple/
-├── app.py               # Server Flask & REST API JSON
-├── db.py                # Koneksi SQLite, helper waktu WIB & skema tabel
-├── excel_export.py      # Generator laporan Excel (.xlsx) 3 sheet
+├── index.html           # Antarmuka kasir PWA & laporan terpadu
+├── manifest.json        # Manifest PWA (install di layar utama HP)
+├── sw.js                # Service Worker untuk mode offline
+├── vercel.json          # Header keamanan untuk static deploy di Vercel
+├── app.py               # Server Flask opsional (untuk jalan lokal / LAN)
+├── db.py                # Koneksi SQLite & helper waktu WIB (opsional)
+├── excel_export.py      # Generator laporan Excel server-side (opsional)
 ├── requirements.txt     # Dependensi Python (Flask, openpyxl)
 ├── run.bat              # Launcher otomatis untuk Windows
 ├── run.sh               # Launcher otomatis untuk macOS/Linux
 ├── share.bat            # Launcher + tunnel publik sementara (Windows)
 ├── scripts/
 │   └── verify.py        # Pengujian otomatis & audit QA (threshold 0.95)
-├── templates/
-│   └── pos.html         # Antarmuka kasir & laporan terpadu
 └── static/
+    ├── icons/
+    │   └── icon.svg     # Ikon aplikasi PWA
     └── js/
-        └── pos.js       # Logika keranjang, checkout, polling & export
+        ├── store.js         # Penyimpanan privat IndexedDB + fallback localStorage
+        ├── xlsx_builder.js  # Generator file Excel (.xlsx) 3 sheet murni di browser
+        └── pos.js           # Logika keranjang, checkout, backup & export
 ```
 
 ---

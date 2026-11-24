@@ -1,0 +1,19 @@
+{
+  "name": "kasir-standsimple",
+  "short_name": "StandSimple",
+  "description": "Kasir stand ringan & offline-first. Semua data tersimpan privat di perangkat Anda.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#F6F5F2",
+  "theme_color": "#18181B",
+  "icons": [
+    {
+      "src": "./static/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

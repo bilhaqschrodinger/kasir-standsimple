@@ -1,4 +1,4 @@
-// kasir-standsimple — Antarmuka Terpadu (Kasir, Menu Cepat, Modal Harian, Omzet & Riwayat Database)
+// kasir-standsimple — Antarmuka Terpadu Privat & Offline-First (IndexedDB + Export Excel)
 
 let menus = [];
 let cart = [];
@@ -39,7 +39,7 @@ function showToast(message, type = 'success') {
 }
 
 function getTodayWib() {
-  return (document.body && document.body.dataset && document.body.dataset.today) || '';
+  return window.StandStore.todayWibStr();
 }
 
 function getSelectedDate() {
@@ -79,10 +79,7 @@ function commitDraftIfPresent() {
 // ---------------------------------------------------------------------------
 async function fetchMenus() {
   try {
-    const res = await fetch('/api/menus');
-    if (!res.ok) return;
-    const data = await res.json();
-    menus = Array.isArray(data) ? data : [];
+    menus = await window.StandStore.getMenus();
     renderMenuGrid();
   } catch (_) {}
 }
@@ -156,25 +153,15 @@ async function handleSaveAsMenu() {
   const btn = document.getElementById('btn-save-as-menu');
   btn.disabled = true;
   try {
-    const res = await fetch('/api/menus', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nama_menu, harga }),
-    });
-    const data = await res.json();
-    if (!res.ok || !data.ok) {
-      showToast(data.error || 'Gagal menyimpan menu.', 'error');
-      return;
-    }
-    // Sekaligus masukkan ke pesanan aktif supaya bisa langsung dibayar juga
+    await window.StandStore.createMenu(nama_menu, harga);
     addItemToCart(nama_menu, harga);
     namaInput.value = '';
     hargaInput.value = '';
     renderCart();
     await fetchMenus();
     showToast(`"${nama_menu}" disimpan ke tombol menu & masuk pesanan`);
-  } catch (_) {
-    showToast('Gagal menghubungi server.', 'error');
+  } catch (err) {
+    showToast((err && err.message) || 'Gagal menyimpan menu.', 'error');
   } finally {
     btn.disabled = false;
   }
@@ -182,9 +169,8 @@ async function handleSaveAsMenu() {
 
 async function deleteMenu(id_menu, nama_menu) {
   try {
-    const res = await fetch(`/api/menus/${id_menu}`, { method: 'DELETE' });
-    const data = await res.json();
-    if (!res.ok || !data.ok) return;
+    const ok = await window.StandStore.deleteMenu(id_menu);
+    if (!ok) return;
     await fetchMenus();
     showToast(`Tombol menu "${nama_menu}" dihapus`);
   } catch (_) {}
@@ -207,20 +193,11 @@ async function handleCapitalInlineSubmit(e) {
   const btn = document.getElementById('btn-save-capital-inline');
   btn.disabled = true;
   try {
-    const res = await fetch('/api/capital', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tanggal: getSelectedDate(), modal: modalVal }),
-    });
-    const data = await res.json();
-    if (!res.ok || !data.ok) {
-      showToast(data.error || 'Gagal menyimpan modal.', 'error');
-      return;
-    }
+    await window.StandStore.setCapital(getSelectedDate(), modalVal);
     await fetchReport(true);
     showToast(`Modal harian ${formatRupiah(modalVal)} tersimpan`);
-  } catch (_) {
-    showToast('Gagal menghubungi server.', 'error');
+  } catch (err) {
+    showToast((err && err.message) || 'Gagal menyimpan modal.', 'error');
   } finally {
     btn.disabled = false;
   }
@@ -511,25 +488,14 @@ async function submitCheckout({ metode_bayar, catatan_bayar = null, uang_diterim
   };
 
   try {
-    const res = await fetch('/api/checkout', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    const data = await res.json();
-
-    if (!res.ok || !data.ok) {
-      showToast(data.error || 'Gagal menyimpan transaksi.', 'error');
-      return;
-    }
-
+    const data = await window.StandStore.checkout(payload);
     closeCashModal();
     closeDigitalModal();
     clearCart();
     showToast(`Transaksi #${data.id_transaction} (${formatRupiah(data.total_harga)}) tersimpan`);
     await fetchReport(true);
-  } catch (_) {
-    showToast('Gagal menghubungi server.', 'error');
+  } catch (err) {
+    showToast((err && err.message) || 'Gagal menyimpan transaksi.', 'error');
   } finally {
     isSubmittingCheckout = false;
     btnConfirmCash.disabled = false;
@@ -539,17 +505,15 @@ async function submitCheckout({ metode_bayar, catatan_bayar = null, uang_diterim
 }
 
 // ---------------------------------------------------------------------------
-// 5. RINGKASAN DATABASE & RIWAYAT TRANSAKSI (Langsung di Layar Utama)
+// 5. RINGKASAN & RIWAYAT TRANSAKSI (Penyimpanan Lokal Perangkat)
 // ---------------------------------------------------------------------------
 async function fetchReport(silent = true) {
   const dateStr = getSelectedDate();
   try {
-    const res = await fetch(`/api/report?date=${encodeURIComponent(dateStr)}`);
-    if (!res.ok) return;
-    const data = await res.json();
+    const data = await window.StandStore.getReport(dateStr);
     renderReport(data);
-  } catch (_) {
-    if (!silent) showToast('Gagal memuat data transaksi.', 'error');
+  } catch (err) {
+    if (!silent) showToast((err && err.message) || 'Gagal memuat data transaksi.', 'error');
   }
 }
 
@@ -580,7 +544,7 @@ function renderReport(data) {
     minute: '2-digit',
     second: '2-digit',
   });
-  document.getElementById('last-updated').textContent = `Diperbarui ${nowStr}`;
+  document.getElementById('last-updated').textContent = `Tersimpan di perangkat • ${nowStr}`;
 
   const tbody = document.getElementById('trx-table-body');
   const emptyEl = document.getElementById('trx-empty');
@@ -662,9 +626,8 @@ function renderReport(data) {
 
 async function openTransactionDetail(id_transaction) {
   try {
-    const res = await fetch(`/api/transactions/${id_transaction}`);
-    if (!res.ok) return;
-    const trx = await res.json();
+    const trx = await window.StandStore.getTransactionDetail(id_transaction);
+    if (!trx) return;
     activeDetailTrxId = trx.id_transaction;
 
     const isVoid = trx.status === 'VOID';
@@ -751,20 +714,24 @@ function closeDetailModal() {
 
 async function voidTransaction(id_transaction) {
   try {
-    const res = await fetch(`/api/transactions/${id_transaction}/void`, {
-      method: 'POST',
-    });
-    const data = await res.json();
-    if (!res.ok || !data.ok) {
-      showToast(data.error || 'Gagal membatalkan transaksi.', 'error');
-      return;
-    }
+    await window.StandStore.voidTransaction(id_transaction);
     closeDetailModal();
     showToast(`Transaksi #${id_transaction} dibatalkan (Void)`);
     await fetchReport(true);
-  } catch (_) {
-    showToast('Gagal menghubungi server.', 'error');
+  } catch (err) {
+    showToast((err && err.message) || 'Gagal membatalkan transaksi.', 'error');
   }
+}
+
+function triggerDownload(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }
 
 async function handleExportExcel() {
@@ -776,43 +743,45 @@ async function handleExportExcel() {
   btn.textContent = 'Menyiapkan...';
 
   try {
-    const res = await fetch(`/api/export/excel?date=${encodeURIComponent(dateStr)}`);
-    if (!res.ok) {
-      let msg = 'Gagal mengekspor laporan Excel.';
-      try {
-        const errData = await res.json();
-        if (errData && errData.error) msg = errData.error;
-      } catch (_) {}
-      showToast(msg, 'error');
-      return;
-    }
-
-    const blob = await res.blob();
-    let filename = `kasir-standsimple_laporan_${dateStr}.xlsx`;
-    const disposition = res.headers.get('Content-Disposition') || '';
-    const matchUtf = disposition.match(/filename\*=UTF-8''([^;]+)/i);
-    const matchPlain = disposition.match(/filename="?([^";]+)"?/i);
-    if (matchUtf && matchUtf[1]) {
-      filename = decodeURIComponent(matchUtf[1]);
-    } else if (matchPlain && matchPlain[1]) {
-      filename = matchPlain[1];
-    }
-
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-
+    const data = await window.StandStore.getDailyExportData(dateStr);
+    const bytes = window.StandXlsx.buildDailyReportXlsxBytes(data);
+    const blob = new Blob([bytes], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+    triggerDownload(blob, `kasir-standsimple_laporan_${dateStr}.xlsx`);
     showToast(`Laporan Excel ${dateStr} diunduh`);
-  } catch (_) {
-    showToast('Gagal mengunduh file Excel.', 'error');
+  } catch (err) {
+    showToast((err && err.message) || 'Gagal mengekspor laporan Excel.', 'error');
   } finally {
     btn.disabled = false;
     btn.textContent = 'Export Excel';
+  }
+}
+
+async function handleBackupJson() {
+  try {
+    const payload = await window.StandStore.exportBackupJson();
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {
+      type: 'application/json',
+    });
+    triggerDownload(blob, `kasir-standsimple_backup_${getTodayWib()}.json`);
+    showToast('File backup perangkat berhasil diunduh');
+  } catch (_) {
+    showToast('Gagal membuat file backup.', 'error');
+  }
+}
+
+async function handleRestoreJson(file) {
+  if (!file) return;
+  try {
+    const text = await file.text();
+    const payload = JSON.parse(text);
+    await window.StandStore.importBackupJson(payload);
+    await fetchMenus();
+    await fetchReport(false);
+    showToast('Data backup berhasil dipulihkan ke perangkat ini');
+  } catch (err) {
+    showToast((err && err.message) || 'File backup tidak valid.', 'error');
   }
 }
 
@@ -820,27 +789,41 @@ async function handleExportExcel() {
 // INISIALISASI
 // ---------------------------------------------------------------------------
 document.addEventListener('DOMContentLoaded', () => {
+  const filterDate = document.getElementById('filter-date');
+  if (!filterDate.value) {
+    filterDate.value = getTodayWib();
+  }
+
   fetchMenus();
   fetchReport(true);
 
-  setInterval(() => {
-    fetchMenus();
-    fetchReport(true);
-  }, 5000);
+  if ('serviceWorker' in navigator && window.location.protocol.startsWith('http')) {
+    navigator.serviceWorker.register('./sw.js').catch(() => {});
+  }
 
-  // Filter Tanggal & Export Excel
-  const filterDate = document.getElementById('filter-date');
+  // Filter Tanggal, Export Excel & Backup/Restore
   filterDate.addEventListener('change', () => fetchReport(false));
   document.getElementById('btn-today').addEventListener('click', () => {
     filterDate.value = getTodayWib();
     fetchReport(false);
   });
   document.getElementById('btn-export-excel').addEventListener('click', handleExportExcel);
+  document.getElementById('btn-backup-json').addEventListener('click', handleBackupJson);
+
+  const restoreInput = document.getElementById('input-restore-json');
+  document.getElementById('btn-restore-json').addEventListener('click', () => {
+    restoreInput.value = '';
+    restoreInput.click();
+  });
+  restoreInput.addEventListener('change', (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (file) handleRestoreJson(file);
+  });
 
   // Modal Harian Inline
   document.getElementById('form-capital-inline').addEventListener('submit', handleCapitalInlineSubmit);
 
-  // Saat user mengetik nama & harga di input kiri, otomatis aktifkan tombol Bayar!
+  // Saat user mengetik nama & harga di input kiri, otomatis aktifkan tombol Bayar
   document.getElementById('custom-nama').addEventListener('input', renderCart);
   document.getElementById('custom-harga').addEventListener('input', renderCart);
 
